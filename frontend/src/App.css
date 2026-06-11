@@ -1,0 +1,761 @@
+/* ==============================
+   Ferrari Inspired Design Tokens
+================================= */
+
+:root {
+  --canvas: #181818;
+  --surface: #303030;
+  --rosso: #da291c;
+  --rosso-active: #b01e0a;
+  --text: #ffffff;
+  --body: #969696;
+  --muted: #666666;
+  --hairline: #303030;
+  --soft: #f7f7f7;
+}
+
+
+/* ==============================
+   Global
+================================= */
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--canvas);
+  color: var(--text);
+  font-family:
+    Inter,
+    -apple-system,
+    BlinkMacSystemFont,
+    system-ui,
+    sans-serif;
+}
+
+.app {
+  min-height: 100vh;
+  background: var(--canvas);
+}
+
+
+/* ==============================
+   Navigation
+================================= */
+
+.top-nav {
+  height: 64px;
+  padding: 0 48px;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  border-bottom: 1px solid var(--hairline);
+
+  background: rgba(24,24,24,0.96);
+}
+
+
+.brand-mark {
+  height: 38px;
+  width: 38px;
+
+  background: var(--rosso);
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  font-size: 13px;
+  font-weight: 700;
+
+  letter-spacing: 1.4px;
+}
+
+
+.nav-title {
+  flex: 1;
+  margin-left: 24px;
+
+  display: flex;
+  gap: 10px;
+  align-items: center;
+
+  text-transform: uppercase;
+  letter-spacing: .65px;
+}
+
+
+.nav-title span {
+  color: var(--body);
+  font-size: 13px;
+}
+
+
+.nav-title strong {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+
+.settings-btn,
+.close-btn,
+.outline-cta {
+
+  height: 48px;
+
+  padding: 0 32px;
+
+  background: transparent;
+
+  color: var(--text);
+
+  border: 1px solid white;
+
+  border-radius: 0;
+
+  text-transform: uppercase;
+
+  letter-spacing: 1.4px;
+
+  cursor:pointer;
+}
+
+
+
+/* ==============================
+   Hero
+================================= */
+
+
+.hero-band {
+
+  min-height: 360px;
+
+  display:flex;
+
+  align-items:flex-end;
+
+  padding:96px 64px;
+
+
+  background:
+    linear-gradient(
+      180deg,
+      rgba(24,24,24,.2),
+      #181818
+    ),
+    linear-gradient(
+      135deg,
+      #3c3c3c,
+      #030303
+    );
+}
+
+
+.hero-content {
+  max-width:850px;
+}
+
+
+.eyebrow,
+.section-label {
+
+  color:var(--rosso);
+
+  text-transform:uppercase;
+
+  letter-spacing:1.1px;
+
+  font-size:11px;
+
+  font-weight:600;
+}
+
+
+.hero-content h1 {
+
+  font-size:56px;
+
+  line-height:1.1;
+
+  font-weight:500;
+
+  letter-spacing:-1.12px;
+
+  margin:16px 0;
+}
+
+
+.hero-content p {
+
+  color:var(--body);
+
+  font-size:15px;
+
+}
+
+
+
+/* ==============================
+   Main Layout
+================================= */
+
+
+.main-grid {
+
+  max-width:1280px;
+
+  margin:auto;
+
+  padding:64px 32px;
+
+
+  display:grid;
+
+  grid-template-columns:420px 1fr;
+
+  gap:32px;
+
+}
+
+
+.panel {
+
+  background:var(--surface);
+
+  padding:32px;
+
+  border:1px solid var(--hairline);
+
+  border-radius:0;
+}
+
+
+.panel h2 {
+
+  font-size:26px;
+
+  font-weight:500;
+
+}
+
+
+
+/* ==============================
+   Forms / Dropdown
+================================= */
+
+
+.dropdown-block {
+
+  margin-bottom:32px;
+}
+
+
+.dropdown-block label {
+
+  display:block;
+
+  margin-bottom:8px;
+
+  color:white;
+
+}
+
+
+.dropdown-trigger {
+
+  width:100%;
+
+  height:48px;
+
+  background:#181818;
+
+  color:white;
+
+  border:1px solid #444;
+
+  border-radius:0;
+
+
+  text-align:left;
+
+  padding:0 16px;
+
+  cursor:pointer;
+}
+
+
+.dropdown-menu {
+
+  margin-top:8px;
+
+  padding:16px;
+
+  max-height:320px;
+
+  overflow:auto;
+
+
+  background:#181818;
+
+  border:1px solid #444;
+}
+
+
+.dropdown-option {
+
+  display:flex!important;
+
+  gap:12px;
+
+  align-items:center;
+
+
+  padding:10px 0;
+
+
+  color:#ccc!important;
+}
+
+
+.dropdown-option input {
+
+  accent-color:var(--rosso);
+}
+
+
+.selected-pills {
+
+  margin-top:12px;
+
+  display:flex;
+
+  flex-wrap:wrap;
+
+  gap:8px;
+}
+
+
+.selected-pills span,
+.feed-badges span {
+
+  padding:4px 12px;
+
+
+  background:#303030;
+
+
+  border-radius:999px;
+
+
+  font-size:11px;
+
+
+  text-transform:uppercase;
+
+
+  letter-spacing:1.1px;
+}
+
+
+/* ==============================
+   Date
+================================= */
+
+
+.date-card {
+
+  margin-bottom:32px;
+}
+
+
+.date-options {
+
+  display:grid;
+
+  grid-template-columns:repeat(2,1fr);
+
+  gap:8px;
+
+
+  margin-top:12px;
+}
+
+
+.date-options button {
+
+  height:48px;
+
+  background:#181818;
+
+  color:white;
+
+  border:1px solid #444;
+
+  cursor:pointer;
+
+
+  text-transform:uppercase;
+
+}
+
+
+.date-options .date-active {
+
+  background:var(--rosso);
+
+  border-color:var(--rosso);
+}
+
+
+.custom-date-row {
+
+  display:flex;
+
+  gap:12px;
+
+  margin-top:16px;
+}
+
+
+input {
+
+  height:48px;
+
+  padding:0 16px;
+
+
+  background:#181818;
+
+  color:white;
+
+
+  border:1px solid #444;
+
+}
+
+
+
+/* ==============================
+   Buttons
+================================= */
+
+
+.primary-cta {
+
+  width:100%;
+
+  height:48px;
+
+
+  background:var(--rosso);
+
+  color:white;
+
+
+  border:none;
+
+
+  border-radius:0;
+
+
+  text-transform:uppercase;
+
+
+  letter-spacing:1.4px;
+
+
+  cursor:pointer;
+}
+
+
+.primary-cta:hover {
+
+  background:var(--rosso-active);
+}
+
+
+.primary-cta.small {
+
+  width:auto;
+
+  padding:0 32px;
+}
+
+
+
+/* ==============================
+   Output
+================================= */
+
+
+.output-header {
+
+  display:flex;
+
+  justify-content:space-between;
+
+  align-items:center;
+
+}
+
+
+.empty-state {
+
+  padding:64px 0;
+
+
+  color:var(--body);
+}
+
+
+.report-box {
+
+  white-space:pre-wrap;
+
+
+  padding:32px;
+
+
+  background:#181818;
+
+
+  border-left:4px solid var(--rosso);
+
+
+  color:white;
+}
+
+
+.supporting-articles li {
+
+  margin-bottom:16px;
+}
+
+
+.supporting-articles a {
+
+  color:white;
+}
+
+
+.supporting-articles small {
+
+  display:block;
+
+
+  color:var(--body);
+}
+
+
+
+/* ==============================
+   Settings Modal
+================================= */
+
+
+.modal-backdrop {
+
+  position:fixed;
+
+  inset:0;
+
+
+  background:rgba(0,0,0,.75);
+
+
+  display:flex;
+
+
+  justify-content:flex-end;
+}
+
+
+.settings-modal {
+
+  width:560px;
+
+  height:100%;
+
+
+  overflow:auto;
+
+
+  padding:48px;
+
+
+  background:#181818;
+
+
+  border-left:1px solid #303030;
+}
+
+
+.modal-header {
+
+  display:flex;
+
+
+  justify-content:space-between;
+
+
+  align-items:center;
+
+
+  margin-bottom:32px;
+}
+
+
+.feed-form {
+
+  display:grid;
+
+
+  gap:16px;
+
+
+  margin-bottom:32px;
+}
+
+
+.feed-item {
+
+  padding:24px 0;
+
+
+  border-bottom:1px solid #303030;
+
+
+  display:flex;
+
+
+  justify-content:space-between;
+
+
+  gap:20px;
+}
+
+
+.feed-item p {
+
+  color:var(--body);
+
+  word-break:break-all;
+}
+
+
+.feed-actions {
+
+  display:flex;
+
+
+  flex-direction:column;
+
+
+  gap:8px;
+}
+
+
+.feed-actions button {
+
+  height:36px;
+
+
+  background:#303030;
+
+
+  color:white;
+
+
+  border:0;
+
+
+  padding:0 16px;
+
+
+  cursor:pointer;
+}
+
+
+.danger-btn {
+
+  background:#da291c!important;
+}
+
+
+.status-on {
+
+  color:#03904a!important;
+}
+
+
+.status-off {
+
+  color:#f13a2c!important;
+}
+
+
+
+/* ==============================
+   Messages
+================================= */
+
+
+.error {
+
+  color:#f13a2c;
+}
+
+
+.hint {
+
+  color:#969696;
+
+  font-size:13px;
+}
+
+
+/* ==============================
+   Responsive
+================================= */
+
+
+@media(max-width:900px){
+
+  .top-nav {
+
+    padding:0 16px;
+  }
+
+
+  .hero-band {
+
+    padding:64px 24px;
+  }
+
+
+  .hero-content h1 {
+
+    font-size:32px;
+  }
+
+
+  .main-grid {
+
+    grid-template-columns:1fr;
+
+    padding:32px 16px;
+  }
+
+
+  .settings-modal {
+
+    width:100%;
+  }
+
+}

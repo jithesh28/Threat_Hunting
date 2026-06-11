@@ -1,0 +1,110 @@
+services:
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: threat-hunting-ollama
+    ports:
+      - "21434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    restart: unless-stopped
+
+
+  ollama-model-puller:
+    image: ollama/ollama:latest
+    container_name: qwen-model-puller
+    depends_on:
+      - ollama
+    volumes:
+      - ollama_models:/root/.ollama
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+    entrypoint: >
+      /bin/sh -c "
+      sleep 15;
+      ollama list | grep -q 'qwen2.5:7b' ||
+      ollama pull qwen2.5:7b;
+      "
+    restart: "no"
+
+
+  backend:
+    build:
+      context: ./backend
+    container_name: threat-hunting-backend
+
+    depends_on:
+      - ollama
+      - postgres
+      - qdrant
+
+    ports:
+      - "18000:8000"
+
+    volumes:
+      - backend_data:/app/data
+
+    environment:
+      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_MODEL: qwen2.5:7b
+
+      DATABASE_URL: postgresql://threatuser:threatpass@postgres:5432/threathunting
+
+      VECTOR_DB_URL: http://qdrant:6333
+
+    restart: unless-stopped
+
+
+  frontend:
+    build:
+      context: ./frontend
+
+    container_name: threat-hunting-ui
+
+    depends_on:
+      - backend
+
+    ports:
+      - "13000:5173"
+
+    restart: unless-stopped
+
+
+  postgres:
+    image: postgres:16
+
+    container_name: threat-hunting-postgres
+
+    environment:
+      POSTGRES_USER: threatuser
+      POSTGRES_PASSWORD: threatpass
+      POSTGRES_DB: threathunting
+
+    ports:
+      - "15432:5432"
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+    restart: unless-stopped
+
+
+  qdrant:
+    image: qdrant/qdrant:latest
+
+    container_name: threat-hunting-qdrant
+
+    ports:
+      - "16333:6333"
+
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+    restart: unless-stopped
+
+
+volumes:
+  ollama_models:
+  postgres_data:
+  qdrant_data:
+  backend_data:
