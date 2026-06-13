@@ -135,9 +135,11 @@ body {
 
   min-height: 360px;
 
-  display:flex;
+  display:grid;
 
   align-items:flex-end;
+
+  gap:32px;
 
   padding:96px 64px;
 
@@ -241,6 +243,134 @@ body {
 
   font-weight:500;
 
+}
+
+
+.dashboard-counter {
+
+  width:100%;
+
+  max-width:1280px;
+
+  border:1px solid #444;
+
+  background:rgba(24,24,24,.88);
+
+  display:grid;
+
+  grid-template-columns:280px 1fr;
+
+  gap:32px;
+
+  align-items:center;
+}
+
+
+.dashboard-counter h2 {
+
+  margin:8px 0 0;
+
+  font-size:24px;
+
+  font-weight:500;
+}
+
+
+.dashboard-counter > div:first-child {
+
+  padding:24px;
+}
+
+
+.dashboard-stats {
+
+  display:grid;
+
+  grid-template-columns:repeat(4,1fr);
+}
+
+
+.dashboard-groups {
+
+  display:grid;
+
+  gap:18px;
+}
+
+
+.dashboard-groups h3 {
+
+  margin:0 0 10px;
+
+  color:var(--body);
+
+  font-size:11px;
+
+  font-weight:600;
+
+  text-transform:uppercase;
+
+  letter-spacing:1.1px;
+}
+
+
+.dashboard-stats.latest-run {
+
+  grid-template-columns:repeat(3,1fr);
+}
+
+
+.dashboard-stat {
+
+  min-height:96px;
+
+  padding:20px;
+
+  display:flex;
+
+  flex-direction:column;
+
+  justify-content:center;
+
+  border-right:1px solid #444;
+
+  background:#202020;
+}
+
+
+.dashboard-stat:last-child {
+
+  border-right:0;
+}
+
+
+.dashboard-stats.latest-run .dashboard-stat:nth-child(3) {
+
+  border-right:0;
+}
+
+
+.dashboard-stat span {
+
+  color:var(--body);
+
+  font-size:11px;
+
+  text-transform:uppercase;
+
+  letter-spacing:1.1px;
+}
+
+
+.dashboard-stat strong {
+
+  margin-top:8px;
+
+  color:white;
+
+  font-size:34px;
+
+  font-weight:500;
 }
 
 
@@ -513,6 +643,26 @@ input {
   width:100%;
 
   margin-bottom:24px;
+}
+
+
+.count-control {
+
+  margin-bottom:32px;
+}
+
+
+.count-control label {
+
+  display:block;
+
+  margin-bottom:8px;
+}
+
+
+.count-control input {
+
+  width:100%;
 }
 
 
@@ -834,6 +984,60 @@ input {
     grid-template-columns:1fr;
 
     padding:32px 16px;
+  }
+
+
+  .dashboard-counter {
+
+    grid-template-columns:1fr;
+
+    padding:24px 16px;
+  }
+
+
+  .dashboard-stats {
+
+    grid-template-columns:repeat(2,1fr);
+  }
+
+
+  .dashboard-stats.latest-run {
+
+    grid-template-columns:1fr;
+  }
+
+
+  .dashboard-stat {
+
+    border-right:0;
+
+    border-bottom:1px solid #444;
+  }
+
+
+  .dashboard-stat:nth-child(odd) {
+
+    border-right:1px solid #444;
+  }
+
+
+  .dashboard-stat:nth-last-child(-n+2) {
+
+    border-bottom:0;
+  }
+
+
+  .dashboard-stats.latest-run .dashboard-stat {
+
+    border-right:0;
+
+    border-bottom:1px solid #444;
+  }
+
+
+  .dashboard-stats.latest-run .dashboard-stat:last-child {
+
+    border-bottom:0;
   }
 
 

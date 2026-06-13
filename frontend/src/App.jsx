@@ -376,6 +376,19 @@ function TechnologyDropdown({ selected, setSelected, customTechnologies }) {
 function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [hypothesisMode, setHypothesisMode] = useState("context");
+  const [dashboardStats, setDashboardStats] = useState({
+    rss_sources: 0,
+    totals: {
+      articles_analyzed: 0,
+      hypotheses_created: 0,
+      mitre_techniques: 0
+    },
+    latest_run: {
+      articles_analyzed: 0,
+      hypotheses_created: 0,
+      mitre_techniques: 0
+    }
+  });
 
   const [feeds, setFeeds] = useState([]);
   const [customTechnologies, setCustomTechnologies] = useState([]);
@@ -395,6 +408,7 @@ function App() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [articleUrl, setArticleUrl] = useState("");
+  const [hypothesisCount, setHypothesisCount] = useState(5);
 
   const [loading, setLoading] = useState(false);
   const [hypothesis, setHypothesis] = useState(null);
@@ -406,6 +420,52 @@ function App() {
     technologyStack.length > 0 ||
     dateMode !== "any";
   const hasArticleUrl = articleUrl.trim().length > 0;
+  const totalDashboardItems = [
+    { label: "RSS Sources", value: dashboardStats.rss_sources },
+    { label: "Total Articles", value: dashboardStats.totals.articles_analyzed },
+    { label: "Total Hypotheses", value: dashboardStats.totals.hypotheses_created },
+    { label: "Total MITRE Techniques", value: dashboardStats.totals.mitre_techniques }
+  ];
+  const latestDashboardItems = [
+    { label: "Articles Analyzed", value: dashboardStats.latest_run.articles_analyzed },
+    { label: "Hypotheses Created", value: dashboardStats.latest_run.hypotheses_created },
+    { label: "MITRE Techniques", value: dashboardStats.latest_run.mitre_techniques }
+  ];
+
+  const loadDashboardStats = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/dashboard/stats`);
+      const data = await response.json();
+
+      setDashboardStats({
+        rss_sources: data.rss_sources || 0,
+        totals: {
+          articles_analyzed: data.totals?.articles_analyzed || 0,
+          hypotheses_created: data.totals?.hypotheses_created || 0,
+          mitre_techniques: data.totals?.mitre_techniques || 0
+        },
+        latest_run: {
+          articles_analyzed: data.latest_run?.articles_analyzed || 0,
+          hypotheses_created: data.latest_run?.hypotheses_created || 0,
+          mitre_techniques: data.latest_run?.mitre_techniques || 0
+        }
+      });
+    } catch {
+      setDashboardStats({
+        rss_sources: 0,
+        totals: {
+          articles_analyzed: 0,
+          hypotheses_created: 0,
+          mitre_techniques: 0
+        },
+        latest_run: {
+          articles_analyzed: 0,
+          hypotheses_created: 0,
+          mitre_techniques: 0
+        }
+      });
+    }
+  };
 
   const loadSettings = async () => {
     try {
@@ -421,6 +481,11 @@ function App() {
 
   useEffect(() => {
     loadSettings();
+    loadDashboardStats();
+
+    const statsInterval = setInterval(loadDashboardStats, 10000);
+
+    return () => clearInterval(statsInterval);
   }, []);
 
   const addFeed = async () => {
@@ -447,6 +512,7 @@ function App() {
         setFeedName("");
         setFeedUrl("");
         setFeedCategory("Custom");
+        loadDashboardStats();
       } else {
         alert(data.message || "Failed to add RSS feed.");
       }
@@ -465,6 +531,7 @@ function App() {
 
       if (data.status === "success") {
         setFeeds(data.rss_feeds || []);
+        loadDashboardStats();
       } else {
         alert(data.message || "Failed to update RSS feed.");
       }
@@ -483,6 +550,7 @@ function App() {
 
       if (data.status === "success") {
         setFeeds(data.rss_feeds || []);
+        loadDashboardStats();
       } else {
         alert(data.message || "Failed to delete RSS feed.");
       }
@@ -577,12 +645,18 @@ function App() {
           technology_stack: technologyStack,
           threat_date: dateMode,
           date_from: dateFrom,
-          date_to: dateTo
+          date_to: dateTo,
+          hypothesis_count: hypothesisCount
         })
       });
 
       const data = await response.json();
       setHypothesis(data);
+      if (data.dashboard_stats) {
+        setDashboardStats(data.dashboard_stats);
+      } else {
+        loadDashboardStats();
+      }
     } catch {
       setHypothesis({
         error: "Failed to generate hypothesis. Check backend and Ollama containers."
@@ -611,6 +685,11 @@ function App() {
 
       const data = await response.json();
       setHypothesis(data);
+      if (data.dashboard_stats) {
+        setDashboardStats(data.dashboard_stats);
+      } else {
+        loadDashboardStats();
+      }
     } catch {
       setHypothesis({
         error: "Failed to generate hypothesis from article URL. Check backend and Ollama containers."
@@ -667,6 +746,39 @@ function App() {
             Start with current context, technology stack, geography, and sector,
             or switch to a single cybersecurity article URL.
           </p>
+        </div>
+
+        <div className="dashboard-counter" aria-labelledby="dashboard-title">
+          <div>
+            <p className="section-label">Threat Intelligence Dashboard</p>
+            <h2 id="dashboard-title">Live Counters</h2>
+          </div>
+
+          <div className="dashboard-groups">
+            <div>
+              <h3>Total Activity</h3>
+              <div className="dashboard-stats">
+                {totalDashboardItems.map((stat) => (
+                  <div className="dashboard-stat" key={stat.label}>
+                    <span>{stat.label}</span>
+                    <strong>{stat.value}</strong>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <h3>Current Run</h3>
+              <div className="dashboard-stats latest-run">
+                {latestDashboardItems.map((stat) => (
+                  <div className="dashboard-stat" key={stat.label}>
+                    <span>{stat.label}</span>
+                    <strong>{stat.value}</strong>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -763,6 +875,20 @@ function App() {
             setSelected={setTechnologyStack}
             customTechnologies={customTechnologies}
           />
+
+          <div className="count-control">
+            <label htmlFor="hypothesis-count">Hypotheses to Create</label>
+            <input
+              id="hypothesis-count"
+              type="number"
+              min="1"
+              max="10"
+              value={hypothesisCount}
+              onChange={(event) =>
+                setHypothesisCount(Number(event.target.value) || 1)
+              }
+            />
+          </div>
 
           <button
             className="primary-cta"

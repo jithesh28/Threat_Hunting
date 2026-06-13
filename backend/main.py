@@ -9,6 +9,7 @@ import requests
 import os
 import json
 import uuid
+import re
 
 try:
     import trafilatura
@@ -56,6 +57,18 @@ DEFAULT_RSS_FEEDS = [
 ]
 
 DEFAULT_CUSTOM_TECHNOLOGIES = []
+DEFAULT_DASHBOARD_STATS = {
+    "totals": {
+        "articles_analyzed": 0,
+        "hypotheses_created": 0,
+        "mitre_techniques": [],
+    },
+    "latest_run": {
+        "articles_analyzed": 0,
+        "hypotheses_created": 0,
+        "mitre_techniques": [],
+    },
+}
 
 
 def ensure_store():
@@ -66,6 +79,7 @@ def ensure_store():
             {
                 "rss_feeds": DEFAULT_RSS_FEEDS,
                 "custom_technologies": DEFAULT_CUSTOM_TECHNOLOGIES,
+                "dashboard_stats": DEFAULT_DASHBOARD_STATS,
             }
         )
 
@@ -74,7 +88,42 @@ def load_store():
     ensure_store()
 
     with open(STORE_FILE, "r", encoding="utf-8") as file:
-        return json.load(file)
+        store = json.load(file)
+
+    changed = False
+
+    if "rss_feeds" not in store:
+        store["rss_feeds"] = DEFAULT_RSS_FEEDS
+        changed = True
+
+    if "custom_technologies" not in store:
+        store["custom_technologies"] = DEFAULT_CUSTOM_TECHNOLOGIES
+        changed = True
+
+    if "dashboard_stats" not in store:
+        store["dashboard_stats"] = DEFAULT_DASHBOARD_STATS
+        changed = True
+    elif "totals" not in store["dashboard_stats"] or "latest_run" not in store["dashboard_stats"]:
+        legacy_stats = store["dashboard_stats"]
+        migrated_stats = {
+            "totals": {
+                "articles_analyzed": int(legacy_stats.get("articles_analyzed", 0)),
+                "hypotheses_created": int(legacy_stats.get("hypotheses_created", 0)),
+                "mitre_techniques": legacy_stats.get("mitre_techniques", []),
+            },
+            "latest_run": {
+                "articles_analyzed": int(legacy_stats.get("articles_analyzed", 0)),
+                "hypotheses_created": int(legacy_stats.get("hypotheses_created", 0)),
+                "mitre_techniques": legacy_stats.get("mitre_techniques", []),
+            },
+        }
+        store["dashboard_stats"] = migrated_stats
+        changed = True
+
+    if changed:
+        save_store(store)
+
+    return store
 
 
 def save_store(data):
@@ -82,6 +131,78 @@ def save_store(data):
 
     with open(STORE_FILE, "w", encoding="utf-8") as file:
         json.dump(data, file, indent=2)
+
+
+def extract_mitre_techniques(report: str):
+    return sorted(set(re.findall(r"\bT\d{4}(?:\.\d{3})?\b", report or "")))
+
+
+def count_report_hypotheses(report: str, fallback_count: int = 1):
+    title_count = len(re.findall(r"hypothesis title\s*:", report or "", re.IGNORECASE))
+
+    if title_count:
+        return title_count
+
+    numbered_count = len(
+        re.findall(
+            r"(?im)^\s*(?:hypothesis\s*)?\d+[\).\s-]+.+",
+            report or "",
+        )
+    )
+
+    if numbered_count:
+        return min(numbered_count, fallback_count)
+
+    return fallback_count
+
+
+def update_dashboard_stats(articles_analyzed: int, hypotheses_created: int, report: str):
+    store = load_store()
+    stats = store.get("dashboard_stats", DEFAULT_DASHBOARD_STATS.copy())
+    totals = stats.get("totals", DEFAULT_DASHBOARD_STATS["totals"].copy())
+    latest_run = {
+        "articles_analyzed": articles_analyzed,
+        "hypotheses_created": hypotheses_created,
+        "mitre_techniques": extract_mitre_techniques(report),
+    }
+
+    total_mitre_techniques = set(totals.get("mitre_techniques", []))
+    total_mitre_techniques.update(latest_run["mitre_techniques"])
+
+    stats = {
+        "totals": {
+            "articles_analyzed": int(totals.get("articles_analyzed", 0)) + articles_analyzed,
+            "hypotheses_created": int(totals.get("hypotheses_created", 0)) + hypotheses_created,
+            "mitre_techniques": sorted(total_mitre_techniques),
+        },
+        "latest_run": latest_run,
+    }
+
+    store["dashboard_stats"] = stats
+    save_store(store)
+
+    return stats
+
+
+def build_dashboard_response():
+    store = load_store()
+    stats = store.get("dashboard_stats", DEFAULT_DASHBOARD_STATS)
+    totals = stats.get("totals", DEFAULT_DASHBOARD_STATS["totals"])
+    latest_run = stats.get("latest_run", DEFAULT_DASHBOARD_STATS["latest_run"])
+
+    return {
+        "rss_sources": len(store.get("rss_feeds", [])),
+        "totals": {
+            "articles_analyzed": int(totals.get("articles_analyzed", 0)),
+            "hypotheses_created": int(totals.get("hypotheses_created", 0)),
+            "mitre_techniques": len(totals.get("mitre_techniques", [])),
+        },
+        "latest_run": {
+            "articles_analyzed": int(latest_run.get("articles_analyzed", 0)),
+            "hypotheses_created": int(latest_run.get("hypotheses_created", 0)),
+            "mitre_techniques": len(latest_run.get("mitre_techniques", [])),
+        },
+    }
 
 
 class RSSFeed(BaseModel):
@@ -111,6 +232,7 @@ class HypothesisRequest(BaseModel):
     threat_date: Optional[str] = "any"
     date_from: Optional[str] = ""
     date_to: Optional[str] = ""
+    hypothesis_count: Optional[int] = 5
 
 
 class ArticleHypothesisRequest(BaseModel):
@@ -130,6 +252,11 @@ def get_settings():
         "rss_feeds": store.get("rss_feeds", []),
         "custom_technologies": store.get("custom_technologies", []),
     }
+
+
+@app.get("/api/dashboard/stats")
+def get_dashboard_stats():
+    return build_dashboard_response()
 
 
 @app.post("/api/rss/feeds")
@@ -365,7 +492,7 @@ def collect_rss_articles(feeds: List[dict], threat_date: str, date_from: str = "
                 }
             )
 
-    return articles[:6]
+    return articles[:20]
 
 
 def extract_article_text(url: str, fallback_summary: str = ""):
@@ -432,11 +559,48 @@ def call_ollama(prompt: str):
     return response.json().get("response", "")
 
 
-def build_hypothesis_prompt(context: str, article_text: str):
+def clamp_hypothesis_count(value: Optional[int]):
+    try:
+        return max(1, min(int(value or 1), 10))
+    except Exception:
+        return 1
+
+
+def article_is_referenced(article: dict, report: str):
+    report_text = report.lower()
+    link = article.get("link", "").strip().lower()
+    title = article.get("title", "").strip().lower()
+
+    if link and link in report_text:
+        return True
+
+    if title and title in report_text:
+        return True
+
+    title_words = [
+        word
+        for word in title.replace("-", " ").split()
+        if len(word) >= 5
+    ]
+
+    if len(title_words) < 3:
+        return False
+
+    matches = sum(1 for word in title_words if word in report_text)
+    return matches >= min(4, len(title_words))
+
+
+def filter_referenced_articles(articles: List[dict], report: str):
+    return [article for article in articles if article_is_referenced(article, report)]
+
+
+def build_hypothesis_prompt(context: str, article_text: str, hypothesis_count: int = 1):
+    count = clamp_hypothesis_count(hypothesis_count)
+
     return f"""
 You are a senior cyber threat hunting analyst.
 
-Create a professional threat hunting hypothesis report.
+Create {count} distinct professional threat hunting hypotheses.
 
 Organization context:
 {context}
@@ -447,21 +611,27 @@ Threat intelligence articles:
 Return the report in this structure:
 
 1. Executive Summary
-2. Main Threat Hunting Hypothesis
-3. Supporting Threat Articles
-4. MITRE ATT&CK Mapping
-5. Hunting Steps
-6. Detection Queries
-   - Microsoft Sentinel KQL
-   - Splunk SPL
-   - Sigma Rule
-7. Required Log Sources
-8. Confidence Rating
-9. Analyst Notes
+2. Hypotheses
+   For each hypothesis from 1 to {count}, include:
+   - Hypothesis Title
+   - Main Threat Hunting Hypothesis
+   - Supporting Threat Articles with exact source URL
+   - MITRE ATT&CK Mapping
+   - Hunting Steps
+   - Detection Queries
+     - Microsoft Sentinel KQL
+     - Splunk SPL
+     - Sigma Rule
+   - Required Log Sources
+   - Confidence Rating
+   - Analyst Notes
 
 Rules:
 - Do not invent source URLs.
 - Use only the given article context.
+- Cite a source URL only when it directly supports that specific hypothesis.
+- Do not include unrelated supporting articles.
+- Make each hypothesis different in behavior, technique, detection angle, or affected technology.
 - If evidence is weak, say confidence is Low.
 - Make it useful for SOC analysts.
 """
@@ -495,6 +665,9 @@ def generate_hypothesis(request: HypothesisRequest):
             "articles": [],
         }
 
+    hypothesis_count = clamp_hypothesis_count(request.hypothesis_count)
+    selected_articles = articles[:max(6, min(len(articles), hypothesis_count * 3))]
+
     article_text = "\n\n".join(
         [
             (
@@ -504,7 +677,7 @@ def generate_hypothesis(request: HypothesisRequest):
                 f"URL: {a['link']}\n"
                 f"Summary: {extract_article_text(a['link'], a['summary'])[:2500]}"
             )
-            for a in articles
+            for a in selected_articles
         ]
     )
 
@@ -516,13 +689,17 @@ Threat article date filter: {request.threat_date}
 Custom date from: {request.date_from or "Not provided"}
 Custom date to: {request.date_to or "Not provided"}
 """
-    prompt = build_hypothesis_prompt(context, article_text)
+    prompt = build_hypothesis_prompt(context, article_text, hypothesis_count)
 
     result = call_ollama(prompt)
+    referenced_articles = filter_referenced_articles(selected_articles, result)
+    created_count = count_report_hypotheses(result, hypothesis_count)
+    update_dashboard_stats(len(selected_articles), created_count, result)
 
     return {
         "report": result,
-        "articles": articles,
+        "articles": referenced_articles,
+        "dashboard_stats": build_dashboard_response(),
     }
 
 
@@ -552,8 +729,9 @@ Geo location: Not provided
 Technology stack: Not provided
 Threat article date filter: Single article URL
 """
-    prompt = build_hypothesis_prompt(context, article_text)
+    prompt = build_hypothesis_prompt(context, article_text, 1)
     result = call_ollama(prompt)
+    update_dashboard_stats(1, count_report_hypotheses(result, 1), result)
 
     return {
         "report": result,
@@ -566,6 +744,7 @@ Threat article date filter: Single article URL
                 "published": article["published"],
             }
         ],
+        "dashboard_stats": build_dashboard_response(),
     }
 
 
