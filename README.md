@@ -383,11 +383,11 @@ ollama list
 
 The following data survives container restart:
 
-✔ RSS feeds
+RSS feeds
 
-✔ Custom technology stack
+Custom technology stack
 
-✔ LLM model files
+LLM model files
 
 
 Stored using Docker volumes:
