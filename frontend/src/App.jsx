@@ -77,6 +77,197 @@ const GEO_OPTIONS = [
   "Latin America"
 ];
 
+const PDF_PAGE = {
+  width: 612,
+  height: 792,
+  marginX: 48,
+  topY: 744,
+  lineHeight: 14,
+  maxLines: 48,
+  maxChars: 92
+};
+
+const escapePdfText = (text) =>
+  text.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+
+const normalizePdfText = (text) =>
+  text
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .replace(/\t/g, "    ")
+    .replace(/[^\x0A\x20-\x7E]/g, "-");
+
+const cleanReportHeading = (line) =>
+  line
+    .replace(/^#+\s*/, "")
+    .replace(/^\d+[\).\s-]+/, "")
+    .replace(/^[-*]\s*/, "")
+    .replace(/\*\*/g, "")
+    .replace(/main threat hunting hypothesis\s*:?\s*/i, "")
+    .trim();
+
+const shortenHeading = (heading, maxLength = 72) => {
+  if (!heading) return "Threat Hunting Hypothesis";
+  if (heading.length <= maxLength) return heading;
+
+  const shortened = heading.slice(0, maxLength).replace(/\s+\S*$/, "").trim();
+  return `${shortened || heading.slice(0, maxLength).trim()}...`;
+};
+
+const getHypothesisHeading = (report) => {
+  const lines = normalizePdfText(report)
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const hypothesisSectionIndex = lines.findIndex((line) =>
+    /main threat hunting hypothesis/i.test(line)
+  );
+
+  if (hypothesisSectionIndex >= 0) {
+    const sectionHeading = cleanReportHeading(lines[hypothesisSectionIndex]);
+
+    if (sectionHeading) {
+      return shortenHeading(sectionHeading);
+    }
+
+    const nextLine = lines
+      .slice(hypothesisSectionIndex + 1)
+      .find((line) => !/^\d+[\).\s-]+/.test(line));
+
+    if (nextLine) {
+      return shortenHeading(cleanReportHeading(nextLine));
+    }
+  }
+
+  const firstContentLine = lines.find((line) => !/executive summary/i.test(line));
+  return shortenHeading(cleanReportHeading(firstContentLine || ""));
+};
+
+const slugifyFilename = (value) => {
+  const slug = value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+
+  return slug || "threat-hunting-hypothesis";
+};
+
+const wrapPdfLine = (line, maxChars) => {
+  if (!line.trim()) return [""];
+
+  const words = line.split(/\s+/);
+  const lines = [];
+  let current = "";
+
+  words.forEach((word) => {
+    if (word.length > maxChars) {
+      if (current) {
+        lines.push(current);
+        current = "";
+      }
+
+      for (let index = 0; index < word.length; index += maxChars) {
+        lines.push(word.slice(index, index + maxChars));
+      }
+
+      return;
+    }
+
+    const nextLine = current ? `${current} ${word}` : word;
+
+    if (nextLine.length > maxChars) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = nextLine;
+    }
+  });
+
+  if (current) lines.push(current);
+
+  return lines;
+};
+
+const createReportPdf = (report, heading) => {
+  const normalizedReport = normalizePdfText(report);
+  const generatedAt = new Date().toLocaleString();
+  const sourceLines = [
+    normalizePdfText(heading),
+    "Threat Hunting Hypothesis Report",
+    `Generated: ${generatedAt}`,
+    "",
+    ...normalizedReport.split("\n")
+  ];
+
+  const wrappedLines = sourceLines.flatMap((line) =>
+    wrapPdfLine(line, PDF_PAGE.maxChars)
+  );
+
+  const pages = [];
+
+  for (let index = 0; index < wrappedLines.length; index += PDF_PAGE.maxLines) {
+    pages.push(wrappedLines.slice(index, index + PDF_PAGE.maxLines));
+  }
+
+  const pageCount = Math.max(pages.length, 1);
+  const fontObjectId = 3 + pageCount * 2;
+  const objects = [];
+  const pageObjectIds = [];
+
+  objects[1] = "<< /Type /Catalog /Pages 2 0 R >>";
+
+  pages.forEach((pageLines, index) => {
+    const pageObjectId = 3 + index * 2;
+    const contentObjectId = pageObjectId + 1;
+    pageObjectIds.push(pageObjectId);
+
+    const textCommands = pageLines
+      .map((line) => `(${escapePdfText(line)}) Tj T*`)
+      .join("\n");
+    const stream = [
+      "BT",
+      "/F1 10 Tf",
+      `${PDF_PAGE.lineHeight} TL`,
+      `${PDF_PAGE.marginX} ${PDF_PAGE.topY} Td`,
+      textCommands,
+      "ET"
+    ].join("\n");
+
+    objects[pageObjectId] =
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PDF_PAGE.width} ${PDF_PAGE.height}] /Resources << /Font << /F1 ${fontObjectId} 0 R >> >> /Contents ${contentObjectId} 0 R >>`;
+    objects[contentObjectId] = `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`;
+  });
+
+  objects[2] =
+    `<< /Type /Pages /Kids [${pageObjectIds.map((id) => `${id} 0 R`).join(" ")}] /Count ${pageObjectIds.length} >>`;
+  objects[fontObjectId] =
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>";
+
+  let pdf = "%PDF-1.4\n";
+  const offsets = [0];
+
+  for (let id = 1; id < objects.length; id += 1) {
+    if (!objects[id]) continue;
+
+    offsets[id] = pdf.length;
+    pdf += `${id} 0 obj\n${objects[id]}\nendobj\n`;
+  }
+
+  const xrefOffset = pdf.length;
+  pdf += `xref\n0 ${objects.length}\n`;
+  pdf += "0000000000 65535 f \n";
+
+  for (let id = 1; id < objects.length; id += 1) {
+    pdf += `${String(offsets[id] || 0).padStart(10, "0")} 00000 n \n`;
+  }
+
+  pdf += `trailer\n<< /Size ${objects.length} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+
+  return pdf;
+};
+
 function MultiSelectDropdown({ label, options, selected, setSelected }) {
   const [open, setOpen] = useState(false);
 
@@ -184,6 +375,7 @@ function TechnologyDropdown({ selected, setSelected, customTechnologies }) {
 
 function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [hypothesisMode, setHypothesisMode] = useState("context");
 
   const [feeds, setFeeds] = useState([]);
   const [customTechnologies, setCustomTechnologies] = useState([]);
@@ -199,18 +391,21 @@ function App() {
   const [geoLocations, setGeoLocations] = useState([]);
   const [technologyStack, setTechnologyStack] = useState([]);
 
-  const [dateMode, setDateMode] = useState("any");
+  const [dateMode, setDateMode] = useState("today");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [articleUrl, setArticleUrl] = useState("");
 
   const [loading, setLoading] = useState(false);
   const [hypothesis, setHypothesis] = useState(null);
 
+  const isArticleMode = hypothesisMode === "article";
   const hasMinimumInput =
     industries.length > 0 ||
     geoLocations.length > 0 ||
     technologyStack.length > 0 ||
     dateMode !== "any";
+  const hasArticleUrl = articleUrl.trim().length > 0;
 
   const loadSettings = async () => {
     try {
@@ -397,18 +592,53 @@ function App() {
     }
   };
 
+  const generateArticleHypothesis = async () => {
+    if (!hasArticleUrl) return;
+
+    setLoading(true);
+    setHypothesis(null);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/hypothesis/article`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          url: articleUrl.trim()
+        })
+      });
+
+      const data = await response.json();
+      setHypothesis(data);
+    } catch {
+      setHypothesis({
+        error: "Failed to generate hypothesis from article URL. Check backend and Ollama containers."
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const changeMode = (mode) => {
+    setHypothesisMode(mode);
+    setHypothesis(null);
+  };
+
   const exportReport = () => {
     if (!hypothesis?.report) return;
 
-    const blob = new Blob([hypothesis.report], {
-      type: "text/plain"
+    const heading = getHypothesisHeading(hypothesis.report);
+    const pdf = createReportPdf(hypothesis.report, heading);
+    const blob = new Blob([pdf], {
+      type: "application/pdf"
     });
 
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
 
     link.href = url;
-    link.download = "threat-hunting-hypothesis-report.txt";
+    link.download = `${slugifyFilename(heading)}.pdf`;
     link.click();
 
     URL.revokeObjectURL(url);
@@ -432,15 +662,34 @@ function App() {
       <section className="hero-band">
         <div className="hero-content">
           <p className="eyebrow">AI-Assisted Threat Intelligence</p>
-          <h1>Generate hunting hypotheses from live RSS threat data.</h1>
+          <h1>Generate hunting hypotheses from current context or one article.</h1>
           <p>
-            Select any one input — sector, geography, technology stack, or date
-            range — and generate analyst-ready hunting logic from enabled feeds.
+            Start with current context, technology stack, geography, and sector,
+            or switch to a single cybersecurity article URL.
           </p>
         </div>
       </section>
 
+      <div className="mode-toggle-wrap">
+        <div className="mode-toggle" aria-label="Hypothesis generation mode">
+          <button
+            className={!isArticleMode ? "mode-active" : ""}
+            onClick={() => changeMode("context")}
+          >
+            Current Context
+          </button>
+
+          <button
+            className={isArticleMode ? "mode-active" : ""}
+            onClick={() => changeMode("article")}
+          >
+            Article URL
+          </button>
+        </div>
+      </div>
+
       <main className="main-grid">
+        {!isArticleMode && (
         <section className="panel context-panel">
           <p className="section-label">Organization Context</p>
           <h2>Input Scope</h2>
@@ -530,6 +779,41 @@ function App() {
             </p>
           )}
         </section>
+        )}
+
+        {isArticleMode && (
+        <section className="panel context-panel article-panel">
+          <p className="section-label">Single Article URL</p>
+          <h2>Article Scope</h2>
+
+          <label className="url-label" htmlFor="article-url">
+            Cybersecurity Blog or Article URL
+          </label>
+
+          <input
+            id="article-url"
+            className="article-url-input"
+            type="url"
+            placeholder="https://example.com/security-research/article"
+            value={articleUrl}
+            onChange={(event) => setArticleUrl(event.target.value)}
+          />
+
+          <button
+            className="primary-cta"
+            disabled={loading || !hasArticleUrl}
+            onClick={generateArticleHypothesis}
+          >
+            {loading ? "Extracting..." : "Generate Hypothesis"}
+          </button>
+
+          {!hasArticleUrl && (
+            <p className="hint">
+              Paste the article URL to fetch, extract, and generate a hunting hypothesis.
+            </p>
+          )}
+        </section>
+        )}
 
         <section className="panel output-panel">
           <div className="output-header">
@@ -549,8 +833,9 @@ function App() {
             <div className="empty-state">
               <h3>No hypothesis generated yet.</h3>
               <p>
-                Configure the context and run the generator. Supporting RSS
-                articles will appear below the final report.
+                {isArticleMode
+                  ? "Paste a cybersecurity article URL and run the generator."
+                  : "Configure the context and run the generator. Supporting RSS articles will appear below the final report."}
               </p>
             </div>
           )}

@@ -10,6 +10,11 @@ import os
 import json
 import uuid
 
+try:
+    import trafilatura
+except ImportError:
+    trafilatura = None
+
 app = FastAPI(title="Threat Hunting Hypothesis API")
 
 app.add_middleware(
@@ -106,6 +111,10 @@ class HypothesisRequest(BaseModel):
     threat_date: Optional[str] = "any"
     date_from: Optional[str] = ""
     date_to: Optional[str] = ""
+
+
+class ArticleHypothesisRequest(BaseModel):
+    url: str
 
 
 @app.get("/api/health")
@@ -359,6 +368,55 @@ def collect_rss_articles(feeds: List[dict], threat_date: str, date_from: str = "
     return articles[:6]
 
 
+def extract_article_text(url: str, fallback_summary: str = ""):
+    if not trafilatura or not url:
+        return fallback_summary
+
+    try:
+        downloaded = trafilatura.fetch_url(url)
+
+        if not downloaded:
+            return fallback_summary
+
+        extracted = trafilatura.extract(downloaded)
+        return extracted or fallback_summary
+    except Exception:
+        return fallback_summary
+
+
+def extract_single_article(url: str):
+    if not trafilatura:
+        return {
+            "error": "Article extraction is unavailable. Install trafilatura and rebuild the backend."
+        }
+
+    try:
+        downloaded = trafilatura.fetch_url(url)
+
+        if not downloaded:
+            return {"error": "Unable to fetch the article URL."}
+
+        metadata = trafilatura.extract_metadata(downloaded)
+        text = trafilatura.extract(
+            downloaded,
+            include_comments=False,
+            include_tables=False,
+        )
+
+        if not text or len(text.strip()) < 200:
+            return {"error": "Unable to extract enough article content from this URL."}
+
+        return {
+            "title": metadata.title if metadata and metadata.title else "Single Article",
+            "author": metadata.author if metadata and metadata.author else "",
+            "published": metadata.date if metadata and metadata.date else "",
+            "url": url,
+            "text": text.strip(),
+        }
+    except Exception as error:
+        return {"error": f"Article extraction failed: {str(error)}"}
+
+
 def call_ollama(prompt: str):
     response = requests.post(
         f"{OLLAMA_BASE_URL}/api/generate",
@@ -372,6 +430,41 @@ def call_ollama(prompt: str):
 
     response.raise_for_status()
     return response.json().get("response", "")
+
+
+def build_hypothesis_prompt(context: str, article_text: str):
+    return f"""
+You are a senior cyber threat hunting analyst.
+
+Create a professional threat hunting hypothesis report.
+
+Organization context:
+{context}
+
+Threat intelligence articles:
+{article_text}
+
+Return the report in this structure:
+
+1. Executive Summary
+2. Main Threat Hunting Hypothesis
+3. Supporting Threat Articles
+4. MITRE ATT&CK Mapping
+5. Hunting Steps
+6. Detection Queries
+   - Microsoft Sentinel KQL
+   - Splunk SPL
+   - Sigma Rule
+7. Required Log Sources
+8. Confidence Rating
+9. Analyst Notes
+
+Rules:
+- Do not invent source URLs.
+- Use only the given article context.
+- If evidence is weak, say confidence is Low.
+- Make it useful for SOC analysts.
+"""
 
 
 @app.post("/api/hypothesis/generate")
@@ -404,52 +497,73 @@ def generate_hypothesis(request: HypothesisRequest):
 
     article_text = "\n\n".join(
         [
-            f"Title: {a['title']}\nSource: {a['feed']}\nPublished: {a['published']}\nURL: {a['link']}\nSummary: {a['summary']}"
+            (
+                f"Title: {a['title']}\n"
+                f"Source: {a['feed']}\n"
+                f"Published: {a['published']}\n"
+                f"URL: {a['link']}\n"
+                f"Summary: {extract_article_text(a['link'], a['summary'])[:2500]}"
+            )
             for a in articles
         ]
     )
 
-    prompt = f"""
-You are a senior cyber threat hunting analyst.
-
-Create a professional threat hunting hypothesis report.
-
-Organization context:
+    context = f"""
 Sector: {request.sector or "Not provided"}
 Geo location: {request.geo_location or "Not provided"}
 Technology stack: {", ".join(request.technology_stack or []) or "Not provided"}
 Threat article date filter: {request.threat_date}
 Custom date from: {request.date_from or "Not provided"}
 Custom date to: {request.date_to or "Not provided"}
-
-Threat intelligence articles:
-{article_text}
-
-Return the report in this structure:
-
-1. Executive Summary
-2. Main Threat Hunting Hypothesis
-3. Supporting Threat Articles
-4. MITRE ATT&CK Mapping
-5. Hunting Steps
-6. Detection Queries
-   - Microsoft Sentinel KQL
-   - Splunk SPL
-   - Sigma Rule
-7. Required Log Sources
-8. Confidence Rating
-9. Analyst Notes
-
-Rules:
-- Do not invent source URLs.
-- Use only the given RSS article context.
-- If evidence is weak, say confidence is Low.
-- Make it useful for SOC analysts.
 """
+    prompt = build_hypothesis_prompt(context, article_text)
 
     result = call_ollama(prompt)
 
     return {
         "report": result,
         "articles": articles,
+    }
+
+
+@app.post("/api/hypothesis/article")
+def generate_article_hypothesis(request: ArticleHypothesisRequest):
+    article_url = request.url.strip()
+
+    if not article_url.startswith(("http://", "https://")):
+        return {"error": "Enter a valid article URL starting with http:// or https://."}
+
+    article = extract_single_article(article_url)
+
+    if article.get("error"):
+        return {"error": article["error"], "articles": []}
+
+    article_text = (
+        f"Title: {article['title']}\n"
+        f"Source: Single Article URL\n"
+        f"Published: {article['published'] or 'Not provided'}\n"
+        f"Author: {article['author'] or 'Not provided'}\n"
+        f"URL: {article['url']}\n"
+        f"Content: {article['text'][:8000]}"
+    )
+    context = """
+Sector: Not provided
+Geo location: Not provided
+Technology stack: Not provided
+Threat article date filter: Single article URL
+"""
+    prompt = build_hypothesis_prompt(context, article_text)
+    result = call_ollama(prompt)
+
+    return {
+        "report": result,
+        "articles": [
+            {
+                "feed": "Single Article URL",
+                "title": article["title"],
+                "summary": article["text"][:500],
+                "link": article["url"],
+                "published": article["published"],
+            }
+        ],
     }

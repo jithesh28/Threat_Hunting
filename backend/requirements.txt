@@ -2,4 +2,5 @@ fastapi
 uvicorn
 feedparser
 requests
+trafilatura
 python-multipart

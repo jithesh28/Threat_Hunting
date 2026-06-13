@@ -244,6 +244,60 @@ body {
 }
 
 
+.mode-toggle-wrap {
+
+  max-width:1280px;
+
+  margin:0 auto;
+
+  padding:32px 32px 0;
+
+  display:flex;
+
+  justify-content:center;
+}
+
+
+.mode-toggle {
+
+  display:grid;
+
+  grid-template-columns:1fr 1fr;
+
+  width:min(520px,100%);
+
+  border:1px solid #444;
+
+  background:#181818;
+}
+
+
+.mode-toggle button {
+
+  height:48px;
+
+  background:transparent;
+
+  color:var(--body);
+
+  border:0;
+
+  cursor:pointer;
+
+  text-transform:uppercase;
+
+  letter-spacing:1.2px;
+}
+
+
+.mode-toggle .mode-active {
+
+  background:var(--rosso);
+
+  color:white;
+}
+
+
 
 /* ==============================
    Forms / Dropdown
@@ -440,6 +494,28 @@ input {
 }
 
 
+.article-panel {
+
+  align-self:start;
+}
+
+
+.url-label {
+
+  display:block;
+
+  margin:28px 0 8px;
+}
+
+
+.article-url-input {
+
+  width:100%;
+
+  margin-bottom:24px;
+}
+
+
 
 /* ==============================
    Buttons
@@ -477,6 +553,14 @@ input {
 .primary-cta:hover {
 
   background:var(--rosso-active);
+}
+
+
+.primary-cta:disabled {
+
+  cursor:not-allowed;
+
+  opacity:.55;
 }
 
 
